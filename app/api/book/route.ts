@@ -95,7 +95,7 @@ export async function POST(req: Request) {
       start_time: start.toISOString(),
       end_time: end.toISOString(),
       notes,
-      status: "pending",
+      status: "confirmed",
     };
 
     const { data: bookingRow, error: bookingErr } = await supabase
