@@ -1,26 +1,82 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* -----------------------------
+   Base
+------------------------------ */
+html, body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #07070a;
+  color: #fff;
+}
+
+/* -----------------------------
+   App Background (image + overlays)
+   Usage: wrap your app with <div className="bg-app"> ... </div>
+------------------------------ */
+.bg-app {
+  position: relative;
+  min-height: 100vh;
+
+  /* Ton image */
+  background-image: url("/pics_2.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  /* petit boost de contraste sans casser l'image */
+  filter: saturate(1.05) contrast(1.05);
+}
+
+/* Vignette + profondeur + léger voile */
+.bg-app::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+
+  background:
+    radial-gradient(1200px 700px at 20% 10%, rgba(255,255,255,0.06), transparent 60%),
+    radial-gradient(900px 500px at 80% 30%, rgba(255,255,255,0.04), transparent 55%),
+    radial-gradient(900px 700px at 50% 95%, rgba(0,0,0,0.70), transparent 60%),
+    linear-gradient(to bottom, rgba(0,0,0,0.65), rgba(0,0,0,0.80));
+
+  opacity: 1;
+}
+
+/* Grain (sans dépendance externe) */
+.bg-app::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.20'/%3E%3C/svg%3E");
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
+}
+
+/* Pour être sûr que ton contenu passe AU-DESSUS des overlays */
+.bg-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* -----------------------------
+   UI helpers (optionnel mais propre)
+------------------------------ */
+.card {
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+.muted {
+  color: rgba(255,255,255,0.60);
 }
