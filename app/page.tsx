@@ -1,41 +1,52 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
-  title: "Barber Booking",
-  description: "Réservation en ligne",
-};
-
-export default function RootLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
+export default function Home() {
   return (
-    <html lang="fr">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {/* Background image */}
-        <div
-          className="fixed inset-0 -z-10 bg-cover bg-center"
-          style={{ backgroundImage: "url(/pics_2.png)" }}
-        />
-        {/* Overlay pour lisibilité */}
-        <div className="fixed inset-0 -z-10 bg-black/60 backdrop-blur-[2px]" />
+    <main
+      style={{
+        minHeight: "100vh",
+        color: "white",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        padding: "60px",
+      }}
+    >
+      {/* MENU */}
+      <div style={{ fontSize: "22px", fontWeight: 600 }}>
+        <a href="#services" style={{ marginRight: "30px" }}>
+          Services
+        </a>
+        <a href="#contact">Contact</a>
+      </div>
 
-        {/* Page container */}
-        <div className="min-h-screen">
-          {children}
-        </div>
-      </body>
-    </html>
+      {/* HERO */}
+      <div style={{ textAlign: "center" }}>
+        <h1
+          style={{
+            fontSize: "64px",
+            fontWeight: 900,
+            marginBottom: "30px",
+          }}
+        >
+          La précision commence ici
+        </h1>
+
+        <button
+          style={{
+            padding: "14px 28px",
+            borderRadius: "40px",
+            border: "none",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Réserver
+        </button>
+      </div>
+
+      {/* FOOTER */}
+      <div style={{ fontSize: "14px", opacity: 0.6 }}>
+        © 2026 Barber Booking
+      </div>
+    </main>
   );
 }
