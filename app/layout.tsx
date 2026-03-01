@@ -1,20 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const geist = Geist({
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
   title: "Barber Booking",
-  description: "Réservation en ligne — salon",
+  description: "Réservation en ligne",
 };
 
 export default function RootLayout({
@@ -24,10 +18,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <div className="bg-app">
-          <div className="bg-content min-h-screen">{children}</div>
-        </div>
+      <body className={geist.className}>
+        <div className="app-shell">{children}</div>
       </body>
     </html>
   );
