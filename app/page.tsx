@@ -1,9 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 
 export default async function Home() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
   const { data, error } = await supabase
     .from("services")
     .select("id,name,description,price_cents,duration_minutes")
@@ -12,13 +9,6 @@ export default async function Home() {
   return (
     <main className="p-6">
       <h1 className="text-2xl font-semibold">Services</h1>
-
-      {/* DEBUG ENV */}
-      <pre className="mt-4 rounded border p-3 text-xs">
-        URL: {String(url)}
-        {"\n"}
-        KEY_START: {String(key)?.slice(0, 20)}
-      </pre>
 
       {error && (
         <pre className="mt-4 rounded bg-red-950/40 p-3 text-sm">
