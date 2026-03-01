@@ -1,154 +1,121 @@
-// app/api/book/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-type BookBody = {
-  service_id: string;
-  start_time: string; // ISO string
-  notes?: string | null;
-  client: {
-    name: string; // on map -> first_name
-    email: string;
-    phone?: string | null;
-  };
-};
+export const runtime = "nodejs"; // important sur Vercel
 
-function jsonError(status: number, message: string, details?: any) {
-  return NextResponse.json({ error: message, details }, { status });
+function getAdmin() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url) throw new Error("Missing env SUPABASE_URL");
+  if (!key) throw new Error("Missing env SUPABASE_SERVICE_ROLE_KEY");
+
+  return createClient(url, key, {
+    auth: { persistSession: false },
+  });
+}
+
+function splitName(fullName?: string) {
+  const s = (fullName ?? "").trim();
+  if (!s) return { first_name: null as string | null, last_name: null as string | null };
+  const parts = s.split(/\s+/);
+  const first = parts.shift() ?? null;
+  const last = parts.length ? parts.join(" ") : null;
+  return { first_name: first, last_name: last };
 }
 
 export async function POST(req: Request) {
+  const supabase = getAdmin();
+
   try {
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const body = await req.json();
 
-    if (!SUPABASE_URL) return jsonError(500, "Missing env var: SUPABASE_URL");
-    if (!SUPABASE_SERVICE_ROLE_KEY)
-      return jsonError(500, "Missing env var: SUPABASE_SERVICE_ROLE_KEY");
+    const service_id: string | undefined = body?.service_id;
+    const start_time: string | undefined = body?.start_time;
+    const notes: string | null = body?.notes ?? null;
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false },
-    });
+    const client = body?.client ?? {};
+    const email: string | undefined = client?.email;
+    const phone: string | null = client?.phone ?? null;
+    const { first_name, last_name } = splitName(client?.name);
 
-    const body = (await req.json()) as BookBody;
-
-    // Basic validation
-    if (!body?.service_id) return jsonError(400, "service_id is required");
-    if (!body?.start_time) return jsonError(400, "start_time is required");
-    if (!body?.client?.email) return jsonError(400, "client.email is required");
-    if (!body?.client?.name) return jsonError(400, "client.name is required");
-
-    const service_id = String(body.service_id);
-    const start_time = String(body.start_time);
-    const notes = body.notes ?? null;
-
-    const email = String(body.client.email).trim().toLowerCase();
-    const phone = body.client.phone ? String(body.client.phone).trim() : null;
-
-    // Map vers ta table clients: first_name / last_name
-    const first_name = String(body.client.name).trim();
-    const last_name = ""; // tu peux splitter plus tard si tu veux
-
-    // 1) Find existing client by email
-    const { data: existingClient, error: findErr } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
-
-    if (findErr) {
-      return jsonError(500, "Failed to find client", {
-        message: findErr.message,
-        code: findErr.code,
-        details: findErr.details,
-        hint: findErr.hint,
-      });
+    if (!service_id) {
+      return NextResponse.json({ error: "Missing service_id" }, { status: 400 });
+    }
+    if (!start_time) {
+      return NextResponse.json({ error: "Missing start_time" }, { status: 400 });
+    }
+    if (!email) {
+      return NextResponse.json({ error: "Missing client.email" }, { status: 400 });
     }
 
-    let client_id: string;
+    // 1) Récupérer la durée du service pour calculer end_time (si ta table services l'a)
+    const { data: serviceRow, error: serviceErr } = await supabase
+      .from("services")
+      .select("duration_minutes")
+      .eq("id", service_id)
+      .single();
 
-    // 2) Insert or update client
-    if (existingClient?.id) {
-      client_id = existingClient.id;
+    if (serviceErr) {
+      return NextResponse.json(
+        { error: "Failed to fetch service", details: serviceErr },
+        { status: 500 }
+      );
+    }
 
-      const { error: updateErr } = await supabase
-        .from("clients")
-        .update({
-          first_name,
-          last_name,
-          phone,
-        })
-        .eq("id", client_id);
+    const durationMinutes = Number(serviceRow?.duration_minutes ?? 0);
+    const start = new Date(start_time);
+    if (Number.isNaN(start.getTime())) {
+      return NextResponse.json({ error: "Invalid start_time" }, { status: 400 });
+    }
+    const end = new Date(start.getTime() + durationMinutes * 60_000);
 
-      if (updateErr) {
-        return jsonError(500, "Failed to update client", {
-          message: updateErr.message,
-          code: updateErr.code,
-          details: updateErr.details,
-          hint: updateErr.hint,
-        });
-      }
-    } else {
-      // IMPORTANT: ta colonne created_at est NOT NULL chez toi.
-      // Si tu as mis DEFAULT now() dans Supabase, tu peux enlever created_at ici.
-      const { data: insertedClient, error: insertErr } = await supabase
-        .from("clients")
-        .insert({
-          first_name,
-          last_name,
-          email,
-          phone,
-          created_at: new Date().toISOString(),
-        })
-        .select("id")
-        .single();
+    // 2) Upsert client (par email)
+    const { data: clientRow, error: clientErr } = await supabase
+      .from("clients")
+      .upsert(
+        { email, phone, first_name, last_name },
+        { onConflict: "email" }
+      )
+      .select("id,email")
+      .single();
 
-      if (insertErr) {
-        return jsonError(500, "Failed to insert client", {
-          message: insertErr.message,
-          code: insertErr.code,
-          details: insertErr.details,
-          hint: insertErr.hint,
-          sent: { first_name, last_name, email, phone },
-        });
-      }
-
-      client_id = insertedClient.id;
+    if (clientErr) {
+      return NextResponse.json(
+        { error: "Failed to upsert client", details: clientErr, sent: { email, phone, first_name, last_name } },
+        { status: 500 }
+      );
     }
 
     // 3) Insert booking
-    // Adapte les colonnes si ta table bookings a des noms différents
-    const { data: booking, error: bookingErr } = await supabase
+    // ⚠️ Si ton enum/status est différent, tu peux enlever status ou changer la valeur.
+    const bookingPayload: any = {
+      service_id,
+      client_id: clientRow.id,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      notes,
+      status: "pending",
+    };
+
+    const { data: bookingRow, error: bookingErr } = await supabase
       .from("bookings")
-      .insert({
-        client_id,
-        service_id,
-        start_time,
-        notes,
-        status: "pending", // si tu as un enum, garde une valeur valide
-        created_at: new Date().toISOString(),
-      })
-      .select("*")
+      .insert(bookingPayload)
+      .select("id, service_id, client_id, start_time, end_time, status")
       .single();
 
     if (bookingErr) {
-      return jsonError(500, "Failed to insert booking", {
-        message: bookingErr.message,
-        code: bookingErr.code,
-        details: bookingErr.details,
-        hint: bookingErr.hint,
-        sent: { client_id, service_id, start_time, notes },
-      });
+      return NextResponse.json(
+        { error: "Failed to insert booking", details: bookingErr, sent: bookingPayload },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json(
-      { ok: true, booking },
-      { status: 200 }
-    );
+    return NextResponse.json({ ok: true, booking: bookingRow }, { status: 200 });
   } catch (e: any) {
-    return jsonError(500, "Unhandled error in /api/book", {
-      message: e?.message ?? String(e),
-      stack: e?.stack,
-    });
+    return NextResponse.json(
+      { error: "Unhandled error", details: String(e?.message ?? e) },
+      { status: 500 }
+    );
   }
 }
