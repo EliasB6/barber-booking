@@ -21,6 +21,16 @@ function getAdminSupabase() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+function cleanSbError(err: any) {
+  if (!err) return null;
+  return {
+    message: err.message,
+    code: err.code,
+    details: err.details,
+    hint: err.hint,
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = getAdminSupabase();
@@ -43,14 +53,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const email = client.email?.trim() || null;
-    const phone = client.phone?.trim() || null;
+    const name = String(client.name).trim();
+    const email = client.email ? String(client.email).trim() : null;
+    const phone = client.phone ? String(client.phone).trim() : "";
 
     let clientId: string | null = null;
 
-    // ✅ GET-OR-CREATE sans upsert (pas besoin de UNIQUE sur email)
+    // --- CLIENT: get-or-create ---
     if (email) {
-      // 1) chercher un client existant
+      // 1) lookup
       const { data: existing, error: findErr } = await supabase
         .from("clients")
         .select("id")
@@ -60,7 +71,7 @@ export async function POST(req: Request) {
 
       if (findErr) {
         return NextResponse.json(
-          { error: "Failed to find client", details: findErr, sent: body },
+          { error: "Failed to find client", details: cleanSbError(findErr), sent: body },
           { status: 500 }
         );
       }
@@ -68,57 +79,69 @@ export async function POST(req: Request) {
       if (existing?.id) {
         clientId = existing.id;
 
-        // 2) update léger (au cas où)
+        // update light
         const { error: updateErr } = await supabase
           .from("clients")
-          .update({
-            name: client.name,
-            phone,
-          })
+          .update({ name, phone })
           .eq("id", clientId);
 
         if (updateErr) {
           return NextResponse.json(
-            { error: "Failed to update client", details: updateErr, sent: body },
+            { error: "Failed to update client", details: cleanSbError(updateErr), sent: body },
             { status: 500 }
           );
         }
       } else {
-        // 3) insert
+        // 2) insert
         const { data: inserted, error: insertErr } = await supabase
           .from("clients")
-          .insert({
-            name: client.name,
-            phone,
-            email,
-          })
+          .insert({ name, email, phone })
           .select("id")
           .single();
 
         if (insertErr) {
-          return NextResponse.json(
-            { error: "Failed to insert client", details: insertErr, sent: body },
-            { status: 500 }
-          );
-        }
+          // ✅ si UNIQUE sur email et que ça existe déjà → on récupère et continue
+          if (insertErr.code === "23505") {
+            const { data: again, error: againErr } = await supabase
+              .from("clients")
+              .select("id")
+              .eq("email", email)
+              .limit(1)
+              .maybeSingle();
 
-        clientId = inserted?.id ?? null;
+            if (againErr || !again?.id) {
+              return NextResponse.json(
+                {
+                  error: "Client exists but failed to re-fetch",
+                  details: cleanSbError(againErr) ?? cleanSbError(insertErr),
+                  sent: body,
+                },
+                { status: 500 }
+              );
+            }
+
+            clientId = again.id;
+          } else {
+            return NextResponse.json(
+              { error: "Failed to insert client", details: cleanSbError(insertErr), sent: body },
+              { status: 500 }
+            );
+          }
+        } else {
+          clientId = inserted?.id ?? null;
+        }
       }
     } else {
-      // Pas d'email -> insert direct
+      // pas d'email: insert direct
       const { data: inserted, error: insertErr } = await supabase
         .from("clients")
-        .insert({
-          name: client.name,
-          phone,
-          email: null,
-        })
+        .insert({ name, email: null, phone })
         .select("id")
         .single();
 
       if (insertErr) {
         return NextResponse.json(
-          { error: "Failed to insert client", details: insertErr, sent: body },
+          { error: "Failed to insert client (no email)", details: cleanSbError(insertErr), sent: body },
           { status: 500 }
         );
       }
@@ -133,7 +156,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ créer le booking
+    // --- BOOKING ---
     const { data: booking, error: bookingErr } = await supabase
       .from("bookings")
       .insert({
@@ -148,7 +171,7 @@ export async function POST(req: Request) {
 
     if (bookingErr) {
       return NextResponse.json(
-        { error: "Failed to create booking", details: bookingErr, sent: body },
+        { error: "Failed to create booking", details: cleanSbError(bookingErr), sent: body },
         { status: 500 }
       );
     }
