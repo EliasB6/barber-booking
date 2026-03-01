@@ -11,7 +11,6 @@ function getAdminSupabase() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
   if (!url || !key) {
-    // On renvoie un message ultra clair + debug safe
     throw new Error(
       `Missing env. SUPABASE_URL=${Boolean(url)} SUPABASE_SERVICE_ROLE_KEY=${Boolean(
         key
@@ -19,9 +18,7 @@ function getAdminSupabase() {
     );
   }
 
-  return createClient(url, key, {
-    auth: { persistSession: false },
-  });
+  return createClient(url, key, { auth: { persistSession: false } });
 }
 
 export async function POST(req: Request) {
@@ -30,10 +27,7 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => null);
     if (!body) {
-      return NextResponse.json(
-        { error: "Invalid JSON body" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
     const { service_id, start_time, client, notes } = body;
@@ -49,40 +43,74 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) créer (ou retrouver) le client
-    // On essaie d'éviter les doublons via email si fourni.
-    // Si pas d'email, on fait un insert simple.
+    const email = client.email?.trim() || null;
+    const phone = client.phone?.trim() || null;
+
     let clientId: string | null = null;
 
-    if (client.email) {
-      // upsert sur email (si tu as une contrainte unique sur email, c'est parfait)
-      const { data: upserted, error: upsertErr } = await supabase
+    // ✅ GET-OR-CREATE sans upsert (pas besoin de UNIQUE sur email)
+    if (email) {
+      // 1) chercher un client existant
+      const { data: existing, error: findErr } = await supabase
         .from("clients")
-        .upsert(
-          {
-            name: client.name,
-            phone: client.phone ?? null,
-            email: client.email,
-          },
-          { onConflict: "email" }
-        )
         .select("id")
-        .single();
+        .eq("email", email)
+        .limit(1)
+        .maybeSingle();
 
-      if (upsertErr) {
+      if (findErr) {
         return NextResponse.json(
-          { error: "Failed to upsert client", details: upsertErr, sent: body },
+          { error: "Failed to find client", details: findErr, sent: body },
           { status: 500 }
         );
       }
 
-      clientId = upserted?.id ?? null;
+      if (existing?.id) {
+        clientId = existing.id;
+
+        // 2) update léger (au cas où)
+        const { error: updateErr } = await supabase
+          .from("clients")
+          .update({
+            name: client.name,
+            phone,
+          })
+          .eq("id", clientId);
+
+        if (updateErr) {
+          return NextResponse.json(
+            { error: "Failed to update client", details: updateErr, sent: body },
+            { status: 500 }
+          );
+        }
+      } else {
+        // 3) insert
+        const { data: inserted, error: insertErr } = await supabase
+          .from("clients")
+          .insert({
+            name: client.name,
+            phone,
+            email,
+          })
+          .select("id")
+          .single();
+
+        if (insertErr) {
+          return NextResponse.json(
+            { error: "Failed to insert client", details: insertErr, sent: body },
+            { status: 500 }
+          );
+        }
+
+        clientId = inserted?.id ?? null;
+      }
     } else {
+      // Pas d'email -> insert direct
       const { data: inserted, error: insertErr } = await supabase
         .from("clients")
         .insert({
           name: client.name,
-          phone: client.phone ?? null,
+          phone,
           email: null,
         })
         .select("id")
@@ -100,19 +128,18 @@ export async function POST(req: Request) {
 
     if (!clientId) {
       return NextResponse.json(
-        { error: "Client id missing after insert/upsert", sent: body },
+        { error: "Client id missing after create", sent: body },
         { status: 500 }
       );
     }
 
-    // 2) créer le booking
-    // (on met status="pending" pour éviter NOT NULL sans default)
+    // ✅ créer le booking
     const { data: booking, error: bookingErr } = await supabase
       .from("bookings")
       .insert({
         service_id,
         client_id: clientId,
-        start_time, // timestamptz attendu
+        start_time,
         notes: notes ?? null,
         status: "pending",
       })
@@ -128,7 +155,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, booking }, { status: 201 });
   } catch (e: any) {
-    // Ici on expose une erreur explicite + safe
     return NextResponse.json(
       { error: "Server error", message: e?.message ?? String(e) },
       { status: 500 }
