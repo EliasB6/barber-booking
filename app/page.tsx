@@ -34,15 +34,12 @@ const FALLBACK_SERVICES: Service[] = [
 ];
 
 export default async function HomePage() {
-  // Si tu as déjà une table services + policy read, tu peux remplacer ce fallback
-  // par un fetch vers ton endpoint /api/services plus tard.
   const services = FALLBACK_SERVICES;
 
   return (
     <main className="min-h-screen bg-black text-white">
       {/* HERO */}
       <section className="relative min-h-[92vh] overflow-hidden">
-        {/* Background image */}
         <Image
           src="/pics_2.png"
           alt="Salon"
@@ -50,21 +47,16 @@ export default async function HomePage() {
           priority
           className="object-cover"
         />
-        {/* Overlay (assombrit un peu pour la lisibilité) */}
         <div className="absolute inset-0 bg-black/35" />
 
-        {/* Top nav */}
+        {/* Nav */}
         <div className="absolute left-0 right-0 top-0 z-10">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-            <div className="text-sm font-semibold tracking-wide text-white/80">
-              {/* Tu peux mettre le nom du salon ici */}
-            </div>
-
+          <div className="mx-auto flex max-w-6xl items-center justify-end px-6 py-6">
             <nav className="flex items-center gap-8 text-sm font-semibold text-white/80">
-              <a href="#services" className="hover:text-white transition">
+              <a href="#services" className="transition hover:text-white">
                 Services
               </a>
-              <a href="#contact" className="hover:text-white transition">
+              <a href="#contact" className="transition hover:text-white">
                 Contact
               </a>
             </nav>
@@ -106,7 +98,7 @@ export default async function HomePage() {
                   hover:-translate-y-1 hover:border-white/25
                 "
               >
-                {/* Contour brillant (hover) */}
+                {/* Contour brillant au hover */}
                 <div
                   className="
                     pointer-events-none absolute inset-0 rounded-3xl opacity-0 transition
@@ -126,20 +118,18 @@ export default async function HomePage() {
                       {typeof s.price_eur === "number" ? `${s.price_eur}€` : "—"}
                     </div>
 
-                    <button
+                    {/* Pas de onClick ici (server component safe) */}
+                    <a
+                      href="#contact"
                       className="
                         rounded-full border border-white/15 bg-white/[0.03]
                         px-5 py-2 text-sm font-semibold text-white/80
                         transition
                         hover:border-white/30 hover:bg-white/[0.06] hover:text-white
                       "
-                      // plus tard : on ouvre un modal / scroll vers form
-                      onClick={() => {
-                        // placeholder
-                      }}
                     >
                       Choisir
-                    </button>
+                    </a>
                   </div>
                 </div>
               </article>
@@ -148,7 +138,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* CONTACT (placeholder clean) */}
+      {/* CONTACT */}
       <section id="contact" className="bg-black">
         <div className="mx-auto max-w-6xl px-6 pb-20">
           <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-10 backdrop-blur-md">
@@ -159,13 +149,18 @@ export default async function HomePage() {
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-                <div className="text-xs font-semibold text-white/50">Téléphone</div>
+                <div className="text-xs font-semibold text-white/50">
+                  Téléphone
+                </div>
                 <div className="mt-2 text-sm font-semibold text-white/90">
                   06 00 00 00 00
                 </div>
               </div>
+
               <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-                <div className="text-xs font-semibold text-white/50">Instagram</div>
+                <div className="text-xs font-semibold text-white/50">
+                  Instagram
+                </div>
                 <div className="mt-2 text-sm font-semibold text-white/90">
                   @toncompte
                 </div>
@@ -179,7 +174,7 @@ export default async function HomePage() {
       <footer className="border-t border-white/10 bg-black">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 text-xs text-white/50">
           <span>© {new Date().getFullYear()} Barber Booking</span>
-          <a href="#services" className="hover:text-white/80 transition">
+          <a href="#services" className="transition hover:text-white/80">
             Retour aux services
           </a>
         </div>
