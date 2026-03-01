@@ -1,91 +1,132 @@
+// app/api/book/route.ts
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { createClient } from "@supabase/supabase-js";
+
+type BookPayload = {
+  service_id: string;
+  start_time: string; // ISO date string e.g. "2026-03-10T10:00:00.000Z"
+  client: {
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+  };
+  notes?: string | null;
+};
+
+function getSupabaseAdmin() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url) throw new Error("Missing SUPABASE_URL env var");
+  if (!key) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY env var");
+
+  return createClient(url, key, {
+    auth: { persistSession: false },
+  });
+}
+
+function badRequest(message: string, details?: unknown) {
+  return NextResponse.json(
+    { error: message, details: details ?? null },
+    { status: 400 }
+  );
+}
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const supabase = getSupabaseAdmin();
 
-    const service_id = body?.service_id as string;
-    const start_time = body?.start_time as string; // ISO
-    const client = body?.client as { name: string; phone?: string; email?: string };
-    const notes = (body?.notes ?? null) as string | null;
-
-    if (!service_id || !start_time || !client?.name) {
-      return NextResponse.json(
-        { error: "Missing required fields (service_id, start_time, client.name)" },
-        { status: 400 }
-      );
+    // 1) Read body safely
+    let body: BookPayload;
+    try {
+      body = (await req.json()) as BookPayload;
+    } catch {
+      return badRequest("Invalid JSON body");
     }
 
-    // 1) Crée le client (ou récupère-le si déjà existant via email)
-    let client_id: string | null = null;
+    const { service_id, start_time, client, notes } = body ?? ({} as any);
 
-    if (client.email) {
-      const { data: existing, error: findErr } = await supabaseAdmin
-        .from("clients")
-        .select("id")
-        .eq("email", client.email)
-        .maybeSingle();
-
-      if (findErr) {
-        return NextResponse.json({ error: "Client lookup failed", details: findErr }, { status: 500 });
-      }
-
-      if (existing?.id) client_id = existing.id;
+    // 2) Validate payload
+    if (!service_id || typeof service_id !== "string") {
+      return badRequest("Missing or invalid service_id");
     }
 
-    if (!client_id) {
-      const { data: created, error: createErr } = await supabaseAdmin
-        .from("clients")
-        .insert({
-          name: client.name,
-          phone: client.phone ?? null,
-          email: client.email ?? null,
-        })
-        .select("id")
-        .single();
-
-      if (createErr) {
-        return NextResponse.json({ error: "Failed to create client", details: createErr }, { status: 500 });
-      }
-
-      client_id = created.id;
-    }
-
-    // 2) Récupère la durée du service pour calculer end_time
-    const { data: svc, error: svcErr } = await supabaseAdmin
-      .from("services")
-      .select("duration_minutes")
-      .eq("id", service_id)
-      .single();
-
-    if (svcErr) {
-      return NextResponse.json({ error: "Failed to load service", details: svcErr }, { status: 500 });
+    if (!start_time || typeof start_time !== "string") {
+      return badRequest("Missing or invalid start_time");
     }
 
     const start = new Date(start_time);
-    const end = new Date(start.getTime() + Number(svc.duration_minutes) * 60_000);
-
-    // 3) Crée la réservation
-    const { data: booking, error: bookErr } = await supabaseAdmin
-      .from("bookings")
-      .insert({
-        client_id,
-        service_id,
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        status: "confirmed",
-        notes,
-      })
-      .select("*")
-      .single();
-
-    if (bookErr) {
-      return NextResponse.json({ error: "Failed to create booking", details: bookErr }, { status: 500 });
+    if (Number.isNaN(start.getTime())) {
+      return badRequest("start_time must be a valid ISO date string");
     }
 
-    return NextResponse.json({ ok: true, booking }, { status: 201 });
+    if (!client || typeof client !== "object") {
+      return badRequest("Missing client object");
+    }
+    if (!client.name || typeof client.name !== "string") {
+      return badRequest("Missing or invalid client.name");
+    }
+
+    const phone = client.phone ?? null;
+    const email = client.email ?? null;
+
+    // 3) Create / find client (simple approach: always insert)
+    const { data: clientRow, error: clientErr } = await supabase
+      .from("clients")
+      .insert([
+        {
+          name: client.name,
+          phone,
+          email,
+        },
+      ])
+      .select("id,name,phone,email")
+      .single();
+
+    if (clientErr) {
+      return NextResponse.json(
+        { error: "Failed to create client", details: clientErr },
+        { status: 500 }
+      );
+    }
+
+    // 4) Create booking
+    // Assumptions about your table:
+    // bookings: id, client_id, service_id, start_time, status, notes, created_at
+    const { data: booking, error: bookingErr } = await supabase
+      .from("bookings")
+      .insert([
+        {
+          client_id: clientRow.id,
+          service_id,
+          start_time: start.toISOString(),
+          status: "pending",
+          notes: notes ?? null,
+        },
+      ])
+      .select("id, client_id, service_id, start_time, status, notes, created_at")
+      .single();
+
+    if (bookingErr) {
+      return NextResponse.json(
+        { error: "Failed to create booking", details: bookingErr },
+        { status: 500 }
+      );
+    }
+
+    // 5) Success
+    return NextResponse.json(
+      { ok: true, booking, client: clientRow },
+      { status: 201 }
+    );
   } catch (e: any) {
-    return NextResponse.json({ error: "Invalid JSON or server error", details: String(e?.message ?? e) }, { status: 500 });
+    // Catch env missing or unexpected errors
+    return NextResponse.json(
+      {
+        error: "Internal Server Error",
+        details: e?.message ?? String(e),
+      },
+      { status: 500 }
+    );
   }
 }
