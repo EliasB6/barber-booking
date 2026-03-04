@@ -1,23 +1,71 @@
 @import "tailwindcss";
 
-/* Base reset */
-html, body {
-  height: 100%;
+/* ---------------- */
+/* RESET GLOBAL */
+/* ---------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
+html,
 body {
-  margin: 0;
-}
-
-/* Empêche les puces/indentations "HTML brut" */
-ul, ol {
-  list-style: none;
   padding: 0;
   margin: 0;
 }
 
-/* Images responsive */
+/* scroll fluide pour Services / Contact */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ---------------- */
+/* BODY */
+/* ---------------- */
+
+body {
+  min-height: 100svh;
+  background: #000;
+  color: #fff;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------------- */
+/* IMAGES */
+/* ---------------- */
+
 img {
   max-width: 100%;
   display: block;
+}
+
+/* ---------------- */
+/* HERO FIX */
+/* ---------------- */
+
+/* évite la bande noire sous certaines résolutions */
+.fullscreen {
+  min-height: 100svh;
+}
+
+/* image hero plein écran */
+.hero-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---------------- */
+/* LINKS */
+/* ---------------- */
+
+a {
+  text-decoration: none;
+  color: inherit;
 }
